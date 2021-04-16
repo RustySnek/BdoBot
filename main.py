@@ -143,4 +143,4 @@ async def on_message(message):
         p.enhance(item, 1)
 
 
-client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.ndiEdf5QOgqKrtXgLRmeX6bFo8w")
+client.run("Token")
