@@ -1,6 +1,6 @@
 import random
 import discord
-from global_items import global_items
+from global_items import global_items, global_tags
 from asyncio import sleep
 
 client = discord.Client()
@@ -63,10 +63,12 @@ class Player:
         for i in range(0, times):
             try:
                 item = list(filter(lambda item: item[0] == name, self.inventory.items))
+                print(item)
+                tag = global_tags[name]
                 #item[0][1] = item[0][1]
                 if item[0][1] == 20:
                     return
-                search_g = list(filter(lambda global_item: global_item[0] ==  name and global_item[1] == item[0][1], global_items))
+                search_g = list(filter(lambda global_item: global_item[0] == tag and global_item[1] == item[0][1], global_items))
                 chance = search_g[0][2]
                 sc = search_g[0][3]
                 pre_sc = search_g[0][4]
@@ -92,15 +94,15 @@ class Player:
                 if x <= chance:
                     if item[0][1] > 8:
                         self.fs = 0
-                    print("enchancment succeded " + str(item[0][0]) + " +" + str(item[0][1]))
+                    print("enchancment succeded " + str(item[0][0]) + " +" + str(item[0][1]) + " at " + str(chance) + "%")
                     item[0][1] += 1
                 else:
-                    print("enhancment failed " + str(item[0][0]) + " +" + str(item[0][1]))
+                    print("enhancment failed " + str(item[0][0]) + " +" + str(item[0][1]) + " at " + str(chance) + "%")
                     self.fs += 1
                     if item[0][1] > 16:
                         item[0][1] -= 1
             except:
-                print("Item is not in the inventory")
+               print("Item is not in the inventory")
         
     async def grind(self, s):
         if self.is_grinding is True:
@@ -112,14 +114,6 @@ class Player:
         self.inventory.money += round(earned_money)
         self.is_grinding == False
         print(self.inventory.money)
-
-
-class Game:
-    def __init__(self, players: list = None) -> None:
-        if players is None:
-            self.players =  []
-        else:
-            self.players = players
 
 p = Player(0, "Terry", 10)
 s = Shop()
@@ -143,4 +137,4 @@ async def on_message(message):
         p.enhance(item, 1)
 
 
-client.run("Token")
+client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.aQobpUbCKduXmb5cL9jeP4eDDzw")
