@@ -1,10 +1,14 @@
 global_tags = {
     "Kzarka": "Boss",
     "Offin": "Boss",
-    "Dim Tree Armor": "Boss",
-    "Bheg's Gloves": "Boss",
-    "Urugon's shoes": "Boss",
-    "Giath's Helmet": "Boss"
+    "Dim": "Boss",
+    "Bheg's": "Boss",
+    "Urugon's": "Boss",
+    "Giath's": "Boss",
+    "Eye": "Acc",
+    "Valtarra Belt": "Acc",
+    "Tungrad": "Acc"
+
 }
 global_items = [
     ["Boss", 0, 100, 0, 0, 0],
@@ -28,6 +32,11 @@ global_items = [
     ["Boss", 18, 6.25, 102, 0.63, 0.13],
     ["Boss", 19, 2, 340, 0.2, 0.04],
     ["Boss", 20, 0.3, 2324, 0.03, 0.01],
+    ["Acc", 0, 25, 18, 2.5, 0.5],
+    ["Acc", 1, 10, 40, 1, 0.2],
+    ["Acc", 2, 7.5, 44, 0.75, 0.15],
+    ["Acc", 3, 2.5, 110, 0.25, 0.05],
+    ["Acc", 4, 0.5, 490, 0.05, 0.01],
 
 
 

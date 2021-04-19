@@ -7,7 +7,6 @@ import discord
 from global_items import global_items, global_tags
 from asyncio import sleep
 
-print(global_tags)
 
 client = discord.Client()
 
@@ -30,7 +29,15 @@ class Shop(Base):
             s = Shop(name = name, lvl = lvl, price = price)
             session.add(s)
             session.commit()
-        return s
+        return 
+    
+    @classmethod
+    def remove_item(cls, name: str):
+        s = session.query(Shop).filter(Shop.name == name).first()
+        if s:
+            session.delete(s)
+            session.commit()
+        
 
 
 class Inventory(Base):
@@ -96,6 +103,8 @@ class Player(Base):
                 split_name = name.split(" ", 1)[0]
                 tag = global_tags[split_name]
                 search_g = list(filter(lambda global_item: global_item[0] == tag and global_item[1] == lvl, global_items))[0]
+                if search_g[0] == "Acc" and lvl == 4:
+                    return
                 chance, soft_cap ,pre_soft_cap, post_soft_cap = search_g[2], search_g[3], search_g[4], search_g[5]
                 fs = self.fs
                 x = random.randint(0, 100)
@@ -108,11 +117,9 @@ class Player(Base):
 
                 if chance > 90:
                     chance = 90
-                
-                if lvl <= 7:
-                    chance = 100
-                elif lvl == 8:
-                    chance = 90
+                if search_g[0] != "Acc":
+                    if lvl <= 7:
+                        chance = 100
 
                 if x <= chance:
                     if lvl > 8:
@@ -123,11 +130,14 @@ class Player(Base):
                 else:
                     await message.channel.send("enhancment failed " + str(name) + " +" + str(item[0].lvl + 1) + " at " + str(chance) + "%")
                     self.fs += 1
+                    if search_g[0] == "Acc":
+                        session.delete(item[0])
+                        session.commit()
                     if lvl > 16:
                         item[0].lvl = lvl - 1
                         session.commit()
-        except:
-            await message.channel.send("Item is not in the inventory")
+        except IndexError:
+           await message.channel.send("Item is not in the inventory")
     
 
 Base.metadata.create_all(engine)
@@ -139,7 +149,6 @@ async def on_message(message):
     
     if message.author == client.user:
         return
-    #try:
     if message.content.startswith("$grind"):
         player = Player.create(dc_id, name)
         sec = message.content[7:]
@@ -170,5 +179,12 @@ async def on_message(message):
         name, lvl, price = content.split("-")
         if dc_id == 683075740790423587:
             shop = Shop.add_item(name, lvl, price)
+    
+    if message.content.startswith("$srm"):
+        name = message.content[5:]
+        if dc_id == 683075740790423587:
+            shop = Shop.remove_item(name)
+        
 
-client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.s8QTXe3r_i0ZvDF6dFGw0urqVkI")
+
+client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.8VjlEir2EFS8xiiUDBb4buiS_XA")
