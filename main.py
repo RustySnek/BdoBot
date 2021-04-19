@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, Boolean, Date, Float, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -7,32 +7,31 @@ import discord
 from global_items import global_items, global_tags
 from asyncio import sleep
 
+print(global_tags)
+
 client = discord.Client()
 
 engine = create_engine("sqlite:///db_test.db")
 session = sessionmaker(bind=engine)()
 Base = declarative_base()
 
+class Shop(Base):
+    __tablename__ = "shop"
+    
+    _id = Column(Integer, primary_key= True)
+    name = Column(String)
+    lvl = Column(Integer)
+    price = Column(Integer)
 
-class Item:
-    def __init__(self, name: str) -> None:  
-        self.name = name
+    @classmethod
+    def add_item(cls, name: str, lvl: int, price: int):
+        s = session.query(Shop).filter(Shop.name == name).first()
+        if not s:
+            s = Shop(name = name, lvl = lvl, price = price)
+            session.add(s)
+            session.commit()
+        return s
 
-def to_dict(x):
-    return x.__dict__
-
-class Shop:
-    def __init__(self, stock: dict = {}) -> None:
-        self.stock = stock
-
-    def add_item(self, item: dict, price):
-        
-        if item.get("name") not in self.stock:
-            self.stock[item.get("name")] = price
-        elif item.get("name") in self.stock:
-            print("item already in stock")
-        else:
-            print("Item does not exist.")
 
 class Inventory(Base):
     __tablename__ = "inventory"
@@ -57,15 +56,13 @@ class Player(Base):
     is_grinding = Column(Boolean)
     inventory = relationship("Inventory", backref="owner")
 
-    def buy_item(self, name, s):
-        if name in s.stock and self.money >= s.stock[name]:
-            print(s.stock[name])
-            self.money -= s.stock[name]
-            inventory = Inventory(name = name, lvl = 0, owner = self)
+    def buy_item(self, name):
+        stock = session.query(Shop).filter(Shop.name == name).first()
+        if stock and self.money >= stock.price:
+            self.money -= stock.price
+            inventory = Inventory(name = name, lvl = stock.lvl, owner = self)
             session.add(inventory)
             session.commit()
-        else:
-            print("error" + str(name))
     
     
     @classmethod
@@ -92,26 +89,23 @@ class Player(Base):
     async def enhance(self, name, times, message):
         try:
             for i in range(0, times):
-                item = session.query(Inventory).filter(Inventory.owner_id == self._id and Inventory.name == name).all()
+                item = session.query(Inventory).filter(Inventory.name == name and Inventory.owner_id == self._id).all()
                 lvl = item[0].lvl
-                tag = global_tags[name]
                 if lvl == 20:
                     return
-                search_g = list(filter(lambda global_item: global_item[0] == tag and global_item[1] == lvl, global_items))
-                chance = search_g[0][2]
-                sc = search_g[0][3]
-                pre_sc = search_g[0][4]
-                post_sc = search_g[0][5]
+                split_name = name.split(" ", 1)[0]
+                tag = global_tags[split_name]
+                search_g = list(filter(lambda global_item: global_item[0] == tag and global_item[1] == lvl, global_items))[0]
+                chance, soft_cap ,pre_soft_cap, post_soft_cap = search_g[2], search_g[3], search_g[4], search_g[5]
                 fs = self.fs
-                print("fs: " + str(fs))
                 x = random.randint(0, 100)
 
-                if fs < sc:
-                    chance += fs*pre_sc
-                elif fs >= post_sc:
-                    chance += sc*pre_sc
-                    chance += (fs - sc)*post_sc
-                
+                if fs < soft_cap:
+                    chance += fs*pre_soft_cap
+                elif fs >= post_soft_cap:
+                    chance += soft_cap*pre_soft_cap
+                    chance += (fs - soft_cap)*post_soft_cap
+
                 if chance > 90:
                     chance = 90
                 
@@ -133,17 +127,13 @@ class Player(Base):
                         item[0].lvl = lvl - 1
                         session.commit()
         except:
-            print("Item is not in the inventory")
+            await message.channel.send("Item is not in the inventory")
     
 
 Base.metadata.create_all(engine)
-s = Shop()
-s.add_item(to_dict(Item("Kzarka Longbow")), 20)
-s.add_item(to_dict(Item("Kzarka Sword")), 20)
 
 @client.event
 async def on_message(message):
-    global s
     name = str(message.author.name)
     dc_id = int(message.author.id)
     
@@ -158,8 +148,7 @@ async def on_message(message):
     if message.content.startswith("$buy"):
         player = Player.create(dc_id, name)
         item = message.content[5:]
-        print(item)
-        player.buy_item(item, s)
+        player.buy_item(item)
     
     if message.content.startswith("$enhance"):
         player = Player.create(dc_id, name)
@@ -175,9 +164,11 @@ async def on_message(message):
     if message.content.startswith("$money"):
         player = Player.create(dc_id, name)
         await message.channel.send("money: " + str(player.money))
-    #except:
-     #  await message.channel.send("You are not registered yet. Type $register")
+    
+    if message.content.startswith("$sadd"):
+        content = message.content[6:]
+        name, lvl, price = content.split("-")
+        if dc_id == 683075740790423587:
+            shop = Shop.add_item(name, lvl, price)
 
-client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.yZe6XDc9hI_zflsfzbzSHe1nJj8")
-#inventory = Inventory(name = "Kzarka Longbow", lvl = 2, owner = player)
-#inventory1 = Inventory(name = "Kzarka Longsword", lvl = 1, owner = player)
+client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.s8QTXe3r_i0ZvDF6dFGw0urqVkI")

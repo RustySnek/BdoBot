@@ -1,5 +1,10 @@
 global_tags = {
-    "Kzarka Longbow": "Boss"
+    "Kzarka": "Boss",
+    "Offin": "Boss",
+    "Dim Tree Armor": "Boss",
+    "Bheg's Gloves": "Boss",
+    "Urugon's shoes": "Boss",
+    "Giath's Helmet": "Boss"
 }
 global_items = [
     ["Boss", 0, 100, 0, 0, 0],
