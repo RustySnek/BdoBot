@@ -4,15 +4,14 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import random
+from discord import Embed
 from global_items import global_items, global_tags
 from asyncio import sleep
-
-def to_dict(x):
-    return x.__dict__
 
 engine = create_engine("sqlite:///db_test.db")
 session = sessionmaker(bind=engine)()
 Base = declarative_base()
+
 
 class Shop(Base):
     __tablename__ = "shop"
@@ -63,13 +62,49 @@ class Player(Base):
     is_grinding = Column(Boolean)
     inventory = relationship("Inventory", backref="owner")
 
-    def buy_item(self, name):
+    async def buy_item(self, name, message):
         stock = session.query(Shop).filter(Shop.name == name).first()
         if stock and self.money >= stock.price:
             self.money -= stock.price
             inventory = Inventory(name = name, lvl = stock.lvl, owner = self)
             session.add(inventory)
             session.commit()
+            buy_embed = Embed(title = f"Bought Item for {stock.price}", description = f"+{stock.lvl} {name}", color = 0x00ff00)
+            buy_embed.add_field(name = "User", value = self.name, inline=False)
+            await message.channel.send(embed = buy_embed)
+
+        elif stock and self.money <= stock.price:
+            no_money = Embed(title = f"You don't have enough money to pay for the item. You need {stock.price - self.money} more.")
+            await message.channel.send(embed = no_money)
+
+        else:
+            doesnt_exist = Embed(title = f"{name} is not in the stock.")
+            await message.channel.send(embed = doesnt_exist)
+    
+    async def sell_item(self, name, num, message):
+        stock = session.query(Shop).filter(Shop.name == name).first()
+        item = list(filter(lambda x: x.name == name, self.inventory))
+
+        if len(item) > 1 and num is None:
+            too_many = Embed(title = f"{len(item)} of the same item.", description = f"You have more than 1 item please select one from list below and do $sell {name}-from 0 to {len(item) - 1}", color = 0x8A2BE2)
+            too_many.add_field(name = "Items", value = f"{item}")
+            await message.channel.send(embed = too_many)
+            return
+        
+        if num is None:
+            num = 0
+
+        if stock:
+            self.money += stock.price * 0.75
+            sell_embed = Embed(title = f"Sold item for {int(stock.price) * 0.75}", description = f"+{item[int(num)].lvl} {name}", color = 0x00ff00)
+            sell_embed.add_field(name = "User", value = self.name)
+            await message.channel.send(embed = sell_embed)
+            session.delete(item[int(num)])
+            session.commit()
+        else:
+            notIn_inv = Embed(title = "Not in the inventory.", description = f"{name} is not in your inventory.")
+            await message.channel.send(embed = notIn_inv)
+
     
     
     @classmethod
@@ -81,8 +116,9 @@ class Player(Base):
             session.commit()
         return player
 
-    async def grind(self, s):
+    async def grind(self, s, message):
         if self.is_grinding is True:
+            await message.channel.send("Already grinding.")
             return
         self.is_grinding = True
         money_sec = 200000000 / 3600
@@ -91,14 +127,22 @@ class Player(Base):
         await sleep(s)
         self.money += round(earned_money)
         self.is_grinding = False
+        ended = Embed(title = f"Finished grinding.", description = f"{message.author.mention} You've earned {round(earned_money)} in total. Your current money amount is {self.money}", color = 0x00ff00)
+        await message.channel.send(embed = ended)
         session.commit()
+    
+    async def stop_grind(self, message):
+        self.is_grinding = False
+        await message.channel.send("Succesfuly stopped grind.")
         
     async def enhance(self, name, message, num):
         try:
             for i in range(0, 1):
                 item = list(filter(lambda x: x.name == name, self.inventory))
                 if len(item) > 1 and num is None:
-                    await message.channel.send(f"You have more than 1 item please select one from the list {item} and do $enhance {name}-(from 0 to number of items - 1)")
+                    too_many = Embed(title = f"{len(item)} of the same item.", description = f"You have more than 1 item please select one from list below and do $enhance {name}-from 0 to {len(item) - 1}", color = 0x8A2BE2)
+                    too_many.add_field(name = "Items", value = f"{item}")
+                    await message.channel.send(embed = too_many)
                     return
 
                 if num is None:
@@ -143,7 +187,10 @@ class Player(Base):
                     if lvl > 16:
                         item[int(num)].lvl = lvl - 1
                         session.commit()
+            
         except IndexError:
             await message.channel.send("Item is not in the inventory")
+
+
     
 Base.metadata.create_all(engine)

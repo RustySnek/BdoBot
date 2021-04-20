@@ -1,5 +1,5 @@
 import discord
-from classes import Player, session, Inventory, Shop
+from classes import Player, session, Inventory, Shop, Embed
 
 client = discord.Client()
 
@@ -10,16 +10,27 @@ async def on_message(message):
     dc_id = int(message.author.id)
     
     if message.author == client.user:
+
         return
     if message.content.startswith("$grind"):
         player = Player.create(dc_id, p_name)
         sec = message.content[7:]
-        await player.grind(int(sec))
+        await player.grind(int(sec), message)
     
     if message.content.startswith("$buy"):
         player = Player.create(dc_id, p_name)
         item = message.content[5:]
-        player.buy_item(item)
+        await player.buy_item(item, message)    
+    
+    if message.content.startswith("$sell"):
+        player = Player.create(dc_id, p_name)
+        item = message.content[6:]
+        try:
+            name, num = item.split("-")
+        except:
+            name = message.content[6:]
+            num = None
+        await player.sell_item(name, num, message)
     
     if message.content.startswith("$enhance"):
         player = Player.create(dc_id, p_name)
@@ -39,7 +50,8 @@ async def on_message(message):
             items.append("+" + str(item.lvl) + " " + str(item.name))
         
         joined = ", ".join(items)
-        await message.channel.send(joined)
+        items_embed = Embed(title = "Inventory", description = joined, color = 0x2B908F)
+        await message.channel.send(embed = items_embed)
         
     if message.content.startswith("$money"):
         player = Player.create(dc_id, p_name)
@@ -56,6 +68,11 @@ async def on_message(message):
         else:
             await message.channel.send("You don't have permission to do that.")
     
+    if message.content.startswith("$stopgrind"):
+        player = Player.create(dc_id, p_name)
+        await player.stop_grind(message)
+
+
     if message.content.startswith("$srm"):
         name = message.content[5:]
         if dc_id == 683075740790423587:
@@ -66,4 +83,4 @@ async def on_message(message):
         else:
             await message.channel.send("You don't have permission to do that.")
         
-client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.Ta6lawcGlHSF1zFvuLnyN3q4i14")
+client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.SK-LHkGhTQ4Mxg5JFroUgwQ4ToU")
