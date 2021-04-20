@@ -6,7 +6,7 @@ global_tags = {
     "Urugon's": "Boss",
     "Giath's": "Boss",
     "Eye": "Acc",
-    "Valtarra Belt": "Acc",
+    "Valtarra": "Acc",
     "Tungrad": "Acc"
 
 }

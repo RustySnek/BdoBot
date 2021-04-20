@@ -1,3 +1,4 @@
+from typing import ItemsView
 from sqlalchemy import create_engine, Column, String, Integer, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -5,6 +6,9 @@ from sqlalchemy.orm import sessionmaker
 import random
 from global_items import global_items, global_tags
 from asyncio import sleep
+
+def to_dict(x):
+    return x.__dict__
 
 engine = create_engine("sqlite:///db_test.db")
 session = sessionmaker(bind=engine)()
@@ -89,11 +93,18 @@ class Player(Base):
         self.is_grinding = False
         session.commit()
         
-    async def enhance(self, name, times, message):
+    async def enhance(self, name, message, num):
         try:
-            for i in range(0, times):
-                item = session.query(Inventory).filter(Inventory.name == name and Inventory.owner_id == self._id).all()
-                lvl = item[0].lvl
+            for i in range(0, 1):
+                item = list(filter(lambda x: x.name == name, self.inventory))
+                if len(item) > 1 and num is None:
+                    await message.channel.send(f"You have more than 1 item please select one from the list {item} and do $enhance {name}-(from 0 to number of items - 1)")
+                    return
+
+                if num is None:
+                    num = 0
+
+                lvl = item[int(num)].lvl
                 if lvl == 20:
                     return
                 split_name = name.split(" ", 1)[0]
@@ -120,19 +131,19 @@ class Player(Base):
                 if x <= chance:
                     if lvl > 8:
                         self.fs = 0
-                    item[0].lvl = 1 + item[0].lvl
+                    item[int(num)].lvl = 1 + item[int(num)].lvl
                     session.commit()
-                    await message.channel.send("enchancment succeded " + str(name) + " +" + str(item[0].lvl) + " at " + str(chance) + "%")
+                    await message.channel.send("enchancment succeded " + str(name) + " +" + str(item[int(num)].lvl) + " at " + str(chance) + "%")
                 else:
-                    await message.channel.send("enhancment failed " + str(name) + " +" + str(item[0].lvl + 1) + " at " + str(chance) + "%")
+                    await message.channel.send("enhancment failed " + str(name) + " +" + str(item[int(num)].lvl + 1) + " at " + str(chance) + "%")
                     self.fs += 1
                     if search_g[0] == "Acc":
                         session.delete(item[0])
                         session.commit()
                     if lvl > 16:
-                        item[0].lvl = lvl - 1
+                        item[int(num)].lvl = lvl - 1
                         session.commit()
         except IndexError:
-           await message.channel.send("Item is not in the inventory")
+            await message.channel.send("Item is not in the inventory")
     
 Base.metadata.create_all(engine)
