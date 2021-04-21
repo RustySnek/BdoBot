@@ -1,16 +1,19 @@
-from typing import ItemsView
-from sqlalchemy import create_engine, Column, String, Integer, Boolean, ForeignKey
+from typing import Counter, ItemsView
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import random
 from discord import Embed
 from global_items import global_items, global_tags
-from asyncio import sleep
+from datetime import timedelta, datetime
 
 engine = create_engine("sqlite:///db_test.db")
 session = sessionmaker(bind=engine)()
 Base = declarative_base()
+
+def formatNum(number):
+    return ("{:,}".format(number))
 
 
 class Shop(Base):
@@ -60,6 +63,8 @@ class Player(Base):
     fs = Column(Integer)
     money = Column(Integer)
     is_grinding = Column(Boolean)
+    grind_end = Column(DateTime)
+    earned_money = Column(Integer)
     inventory = relationship("Inventory", backref="owner")
 
     async def buy_item(self, name, message):
@@ -69,16 +74,16 @@ class Player(Base):
             inventory = Inventory(name = name, lvl = stock.lvl, owner = self)
             session.add(inventory)
             session.commit()
-            buy_embed = Embed(title = f"Bought Item for {stock.price}", description = f"+{stock.lvl} {name}", color = 0x00ff00)
+            buy_embed = Embed(title = f"Bought Item for {formatNum(stock.price)}", description = f"+{stock.lvl} {name}", color = 0x00ff00)
             buy_embed.add_field(name = "User", value = self.name, inline=False)
             await message.channel.send(embed = buy_embed)
 
         elif stock and self.money <= stock.price:
-            no_money = Embed(title = f"You don't have enough money to pay for the item. You need {stock.price - self.money} more.")
+            no_money = Embed(title = f"You don't have enough money to pay for the item. You need {formatNum(stock.price - self.money)} more.", color = 0xff0000)
             await message.channel.send(embed = no_money)
 
         else:
-            doesnt_exist = Embed(title = f"{name} is not in the stock.")
+            doesnt_exist = Embed(title = f"{name} is not in the stock.", color = 0xff0000)
             await message.channel.send(embed = doesnt_exist)
     
     async def sell_item(self, name, num, message):
@@ -95,8 +100,9 @@ class Player(Base):
             num = 0
 
         if stock:
-            self.money += stock.price * 0.75
-            sell_embed = Embed(title = f"Sold item for {int(stock.price) * 0.75}", description = f"+{item[int(num)].lvl} {name}", color = 0x00ff00)
+            sell_price = int(stock.price * 0.75)
+            self.money += sell_price
+            sell_embed = Embed(title = f"Sold item for {formatNum(sell_price)}", description = f"+{item[int(num)].lvl} {name}", color = 0x00ff00)
             sell_embed.add_field(name = "User", value = self.name)
             await message.channel.send(embed = sell_embed)
             session.delete(item[int(num)])
@@ -123,16 +129,32 @@ class Player(Base):
         self.is_grinding = True
         money_sec = 200000000 / 3600
         earned_money = money_sec * s
+        self.earned_money = round(earned_money)
+        now = datetime.now()
+        tdelta = timedelta(seconds = s)
+        self.grind_end = now + tdelta
         session.commit()
-        await sleep(s)
-        self.money += round(earned_money)
-        self.is_grinding = False
-        ended = Embed(title = f"Finished grinding.", description = f"{message.author.mention} You've earned {round(earned_money)} in total. Your current money amount is {self.money}", color = 0x00ff00)
-        await message.channel.send(embed = ended)
-        session.commit()
-    
+
+    async def grind_info(self, message):
+        now = datetime.now()
+        try:
+            if now >= self.grind_end:
+                self.money += self.earned_money
+                self.is_grinding = False
+                self.grind_end = None
+                ended = Embed(title = f"Finished grinding.", description = f"{message.author.mention} You've earned {formatNum(self.earned_money)} in total. Your current money amount is {formatNum(self.money)}", color = 0x00ff00)
+                self.earned_money = None
+                await message.channel.send(embed = ended)
+                session.commit()
+            else:
+                await message.channel.send(f"{self.grind_end - now} left till the end of your grind.")
+        except TypeError:
+            await message.channel.send("You are not grinding. Type $grind (seconds) to start")
     async def stop_grind(self, message):
         self.is_grinding = False
+        self.grind_end = None
+        self.earned_money = None
+        session.commit()
         await message.channel.send("Succesfuly stopped grind.")
         
     async def enhance(self, name, message, num):
@@ -177,9 +199,10 @@ class Player(Base):
                         self.fs = 0
                     item[int(num)].lvl = 1 + item[int(num)].lvl
                     session.commit()
-                    await message.channel.send("enchancment succeded " + str(name) + " +" + str(item[int(num)].lvl) + " at " + str(chance) + "%")
+                    success = Embed(title = "Enhancment Succeded!", description = f"You've succeded on enhancing +{item[int(num)].lvl} {name} at {chance}%", color = 0x00ff00)
+                    await message.channel.send(embed = success)
                 else:
-                    await message.channel.send("enhancment failed " + str(name) + " +" + str(item[int(num)].lvl + 1) + " at " + str(chance) + "%")
+                    fail = Embed(title = "Enhancment Failed!", description = f"You've failed on enhancing +{item[int(num)].lvl + 1} {name} at {chance}%", color = 0xff0000)
                     self.fs += 1
                     if search_g[0] == "Acc":
                         session.delete(item[0])
@@ -187,9 +210,14 @@ class Player(Base):
                     if lvl > 16:
                         item[int(num)].lvl = lvl - 1
                         session.commit()
+                        fail.add_field(name = "Item level dropped!", value = f"{name} level dropped due to enhancment failure.")
+                        
+                    await message.channel.send(embed = fail)
             
         except IndexError:
             await message.channel.send("Item is not in the inventory")
+        #except:
+         #   await message.channel.send(f"{name} cannot be enhanced")
 
 
     

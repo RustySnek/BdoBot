@@ -1,5 +1,5 @@
 import discord
-from classes import Player, session, Inventory, Shop, Embed
+from classes import Player, session, Inventory, Shop, formatNum
 
 client = discord.Client()
 
@@ -16,6 +16,12 @@ async def on_message(message):
         player = Player.create(dc_id, p_name)
         sec = message.content[7:]
         await player.grind(int(sec), message)
+    
+    if message.content.startswith("$ginfo"):
+        player = Player.create(dc_id, p_name)
+        await player.grind_info(message)
+
+        
     
     if message.content.startswith("$buy"):
         player = Player.create(dc_id, p_name)
@@ -50,12 +56,12 @@ async def on_message(message):
             items.append("+" + str(item.lvl) + " " + str(item.name))
         
         joined = ", ".join(items)
-        items_embed = Embed(title = "Inventory", description = joined, color = 0x2B908F)
+        items_embed = discord.Embed(title = "Inventory", description = joined, color = 0x2B908F)
         await message.channel.send(embed = items_embed)
         
     if message.content.startswith("$money"):
         player = Player.create(dc_id, p_name)
-        await message.channel.send("money: " + str(player.money))
+        await message.channel.send("money: " + str(formatNum(player.money)))
     
     if message.content.startswith("$sadd"):
         content = message.content[6:]
@@ -63,6 +69,7 @@ async def on_message(message):
             name, lvl, price = content.split("-")
         except ValueError:
             await message.channel.send("Wrong syntax do name-lvl-price")
+            return
         if dc_id == 683075740790423587:
             shop = Shop.add_item(name, lvl, price)
         else:
@@ -83,4 +90,4 @@ async def on_message(message):
         else:
             await message.channel.send("You don't have permission to do that.")
         
-client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.SK-LHkGhTQ4Mxg5JFroUgwQ4ToU")
+client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.yXDJ1XCZWDQMkc0kDI6sI6x7wGw")
