@@ -331,5 +331,5 @@ async def on_message(message):
     if message.content.lower() in keywords:
         await keywords[message.content.lower()](message, player)
 
-client.run("ODMyNTgyODczNzA1ODczNDI5.YHl5OQ.Ih6ZfyRsUeTZj3W66zOH6gOjD9c")
+client.run("Your Token")
 
