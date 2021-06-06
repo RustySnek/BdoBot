@@ -12,6 +12,12 @@ engine = create_engine("sqlite:///db_test.db")
 session = sessionmaker(bind=engine)()
 Base = declarative_base()
 
+colors = {
+    "purple": 0x8A2BE2,
+    "red": 0xff0000,
+    "green": 0x00ff00
+}
+
 def formatNum(number):
     return ("{:,}".format(number))
 
@@ -23,15 +29,19 @@ class Shop(Base):
     name = Column(String)
     lvl = Column(Integer)
     price = Column(Integer)
+    stackable = Column(Boolean)
+        
 
     @classmethod
-    def add_item(cls, name: str, lvl: int, price: int):
-        s = session.query(Shop).filter(Shop.name == name).first()
+    async def add_item(cls, name: str, lvl: int, price: int,stackable,  message):
+        s = session.query(Shop).filter(Shop.name == name).all()
         if not s:
-            s = Shop(name = name, lvl = lvl, price = price)
+            s = Shop(name = name, lvl = int(lvl), price = int(price), stackable = stackable)
             session.add(s)
             session.commit()
-        return 
+        else:
+            await message.channel.send("Item already exists")
+            return 
     
     @classmethod
     def remove_item(cls, name: str):
@@ -48,10 +58,13 @@ class Inventory(Base):
     _id = Column(Integer, primary_key = True)
     name = Column(String)
     lvl = Column(Integer)
+    durability = Column(Integer)
+    stackable = Column(Boolean)
+    quantity = Column(Integer)
     owner_id = Column(Integer, ForeignKey("player._id"))
 
-    def __repr__(self) -> str:
-        return "+" + str(self.lvl) + " " + str(self.name)
+    #def __repr__(self) -> str:
+     #   return "+" + str(self.lvl) + " " + str(self.name)
     
 
 class Player(Base):
@@ -65,51 +78,62 @@ class Player(Base):
     is_grinding = Column(Boolean)
     grind_end = Column(DateTime)
     earned_money = Column(Integer)
+    last_enhanced_id = Column(Integer)
     inventory = relationship("Inventory", backref="owner")
 
-    async def buy_item(self, name, message):
+    async def buy_item(self, name, quantity, message):
         stock = session.query(Shop).filter(Shop.name == name).first()
-        if stock and self.money >= stock.price:
-            self.money -= stock.price
-            inventory = Inventory(name = name, lvl = stock.lvl, owner = self)
-            session.add(inventory)
-            session.commit()
-            buy_embed = Embed(title = f"Bought Item for {formatNum(stock.price)}", description = f"+{stock.lvl} {name}", color = 0x00ff00)
-            buy_embed.add_field(name = "User", value = self.name, inline=False)
-            await message.channel.send(embed = buy_embed)
+        if stock and self.money >= stock.price * quantity:
+            if stock.stackable is False:
+                self.money -= stock.price * quantity
+                for i in range(0,quantity):
+                    inventory = Inventory(name = name, lvl = stock.lvl, durability = 100, owner = self)
+                    session.add(inventory)
+                    session.commit()
+                buy_embed = Embed(title = f"Bought {quantity} item/s for {formatNum(stock.price * quantity)}", description = f"{name}", color = colors["green"])
+                buy_embed.add_field(name = "User", value = self.name, inline=False)
+                await message.channel.send(embed = buy_embed)
+            elif stock.stackable is True:
 
-        elif stock and self.money <= stock.price:
-            no_money = Embed(title = f"You don't have enough money to pay for the item. You need {formatNum(stock.price - self.money)} more.", color = 0xff0000)
+                self.money -= stock.price * quantity
+                inventory = Inventory(name = name, quantity = quantity, owner = self)
+                buy_embed = Embed(title = f"Bought {quantity} items for {formatNum(stock.price * quantity)}", description = f"{name}", color = colors["green"])
+                buy_embed.add_field(name = "User", value = self.name, inline=False)
+                await message.channel.send(embed = buy_embed)
+                
+
+        else:
+            no_money = Embed(title = f"You don't have enough money to pay for the item. You need {formatNum(stock.price * quantity - self.money)} more.", color = colors["red"])
             await message.channel.send(embed = no_money)
-
-        else:
-            doesnt_exist = Embed(title = f"{name} is not in the stock.", color = 0xff0000)
-            await message.channel.send(embed = doesnt_exist)
     
-    async def sell_item(self, name, num, message):
+    async def sell_item(self, name: str, _id: int, message):
         stock = session.query(Shop).filter(Shop.name == name).first()
-        item = list(filter(lambda x: x.name == name, self.inventory))
-
-        if len(item) > 1 and num is None:
-            too_many = Embed(title = f"{len(item)} of the same item.", description = f"You have more than 1 item please select one from list below and do $sell {name}-from 0 to {len(item) - 1}", color = 0x8A2BE2)
-            too_many.add_field(name = "Items", value = f"{item}")
-            await message.channel.send(embed = too_many)
-            return
+        item = list(filter(lambda x: x._id == _id, self.inventory))[0]
+        sell_price = int(stock.price * 0.75)
+        self.money += sell_price
+        sell_embed = Embed(title = f"Sold item for *{formatNum(sell_price)} $*", description = f"+{item.lvl} {name}", color = colors["green"])
+        sell_embed.add_field(name = "User", value = f"{message.author.mention}")
+        await message.channel.send(embed = sell_embed)
+        session.delete(item)
+        session.commit()
         
-        if num is None:
-            num = 0
+    
+    async def repair(self, _id: int, value: int ,message):
+        
+        item = list(filter(lambda x: x._id == _id, self.inventory))[0]
+        if item.durability == 100:
+            await message.channel.send("Item is already at full durability.")
+            return
 
-        if stock:
-            sell_price = int(stock.price * 0.75)
-            self.money += sell_price
-            sell_embed = Embed(title = f"Sold item for {formatNum(sell_price)}", description = f"+{item[int(num)].lvl} {name}", color = 0x00ff00)
-            sell_embed.add_field(name = "User", value = self.name)
-            await message.channel.send(embed = sell_embed)
-            session.delete(item[int(num)])
-            session.commit()
-        else:
-            notIn_inv = Embed(title = "Not in the inventory.", description = f"{name} is not in your inventory.")
-            await message.channel.send(embed = notIn_inv)
+        if item.durability + value > 100:
+            await message.channel.send(f"Maximum durability can't exceed 100. Changed value to {100-item.durability}.")
+            value = 100 - item.durability
+
+        item.durability += value
+        repair_embed = Embed(title = "Repair", description = f"Repaired {item.name}. Current durability is {item.durability}.", color = colors["green"])
+        await message.channel.send(embed = repair_embed)
+        
+        
 
     
     
@@ -126,6 +150,7 @@ class Player(Base):
         if self.is_grinding is True:
             await message.channel.send("Already grinding.")
             return
+        await message.channel.send(f"{message.author.mention} Started grinding for {s / 60} minutes!")
         self.is_grinding = True
         money_sec = 200000000 / 3600
         earned_money = money_sec * s
@@ -142,7 +167,7 @@ class Player(Base):
                 self.money += self.earned_money
                 self.is_grinding = False
                 self.grind_end = None
-                ended = Embed(title = f"Finished grinding.", description = f"{message.author.mention} You've earned {formatNum(self.earned_money)} in total. Your current money amount is {formatNum(self.money)}", color = 0x00ff00)
+                ended = Embed(title = f"Finished grinding.", description = f"{message.author.mention} You've earned {formatNum(self.earned_money)} in total. Your current money amount is {formatNum(self.money)}", color = colors["green"])
                 self.earned_money = None
                 await message.channel.send(embed = ended)
                 session.commit()
@@ -157,68 +182,65 @@ class Player(Base):
         session.commit()
         await message.channel.send("Succesfuly stopped grind.")
         
-    async def enhance(self, name, message, num):
+    async def enhance(self, _id: int, message):
         try:
-            for i in range(0, 1):
-                item = list(filter(lambda x: x.name == name, self.inventory))
-                if len(item) > 1 and num is None:
-                    too_many = Embed(title = f"{len(item)} of the same item.", description = f"You have more than 1 item please select one from list below and do $enhance {name}-from 0 to {len(item) - 1}", color = 0x8A2BE2)
-                    too_many.add_field(name = "Items", value = f"{item}")
-                    await message.channel.send(embed = too_many)
-                    return
-
-                if num is None:
-                    num = 0
-
-                lvl = item[int(num)].lvl
-                if lvl == 20:
-                    return
-                split_name = name.split(" ", 1)[0]
-                tag = global_tags[split_name]
-                search_g = list(filter(lambda global_item: global_item[0] == tag and global_item[1] == lvl, global_items))[0]
-                if search_g[0] == "Acc" and lvl == 4:
-                    return
-                chance, soft_cap ,pre_soft_cap, post_soft_cap = search_g[2], search_g[3], search_g[4], search_g[5]
-                fs = self.fs
-                x = random.randint(0, 100)
-
-                if fs < soft_cap:
-                    chance += fs*pre_soft_cap
-                elif fs >= post_soft_cap:
-                    chance += soft_cap*pre_soft_cap
-                    chance += (fs - soft_cap)*post_soft_cap
-
-                if chance > 90:
-                    chance = 90
-                if search_g[0] != "Acc":
-                    if lvl <= 7:
-                        chance = 100
-
-                if x <= chance:
-                    if lvl > 8:
-                        self.fs = 0
-                    item[int(num)].lvl = 1 + item[int(num)].lvl
-                    session.commit()
-                    success = Embed(title = "Enhancment Succeded!", description = f"You've succeded on enhancing +{item[int(num)].lvl} {name} at {chance}%", color = 0x00ff00)
-                    await message.channel.send(embed = success)
-                else:
-                    fail = Embed(title = "Enhancment Failed!", description = f"You've failed on enhancing +{item[int(num)].lvl + 1} {name} at {chance}%", color = 0xff0000)
-                    self.fs += 1
-                    if search_g[0] == "Acc":
-                        session.delete(item[0])
-                        session.commit()
-                    if lvl > 16:
-                        item[int(num)].lvl = lvl - 1
-                        session.commit()
-                        fail.add_field(name = "Item level dropped!", value = f"{name} level dropped due to enhancment failure.")
-                        
-                    await message.channel.send(embed = fail)
-            
+            item = list(filter(lambda x: x._id == _id, self.inventory))[0]
         except IndexError:
-            await message.channel.send("Item is not in the inventory")
-        #except:
-         #   await message.channel.send(f"{name} cannot be enhanced")
+            await message.channel.send(f"{message.author.mention} Item no longer exists.")
+            return
+        if item.lvl <= 15 and item.durability < 20 or item.lvl > 15 and item.durability < 10:
+                await message.channel.send(f"Durability to low for enhancment. Type $repair to repair the item.")
+                return
+        lvl = item.lvl
+        if lvl == 20:
+            return
+        split_name = item.name.split(" ", 1)[0]
+        try:
+            tag = global_tags[split_name]
+        except KeyError:
+            await message.channel.send(f"{item.name} Can't be enhanced.")
+            return
+        search_g = list(filter(lambda global_item: global_item[0] == tag and global_item[1] == lvl, global_items))[0]
+        if search_g[0] == "Acc" and lvl == 4:
+            return
+        chance, soft_cap ,pre_soft_cap, post_soft_cap = search_g[2], search_g[3], search_g[4], search_g[5]
+        fs = self.fs
+        x = random.randint(0, 100)
+
+        if fs < soft_cap:
+            chance += fs*pre_soft_cap
+        elif fs >= post_soft_cap:
+            chance += soft_cap*pre_soft_cap
+            chance += (fs - soft_cap)*post_soft_cap
+
+        if chance > 90:
+            chance = 90
+        if search_g[0] != "Acc":
+            self.last_enhanced_id = _id
+            if lvl <= 7:
+                chance = 100
+
+        if x <= chance:
+            if lvl > 8:
+                self.fs = 0
+            item.lvl = 1 + item.lvl
+            session.commit()
+            success = Embed(title = "Enhancment Succeded!", description = f"You've succeded on enhancing +{item.lvl} {item.name} at {chance}%", color = colors["green"])
+            await message.channel.send(embed = success)
+        else:
+            fail = Embed(title = "Enhancment Failed!", description = f"You've failed on enhancing +{item.lvl + 1} {item.name} at {chance}%", color = colors["red"])
+            self.fs += 1
+            if search_g[0] == "Acc":
+                session.delete(item[0])
+                session.commit()
+            if lvl > 16:
+                item.lvl = lvl - 1
+                item.durability -= 10
+                session.commit()
+                fail.add_field(name = "Item level dropped!", value = f"{item.name} level dropped due to enhancment failure.")
+            elif lvl <= 15:
+                item.durability -= 5                 
+            await message.channel.send(embed = fail)
 
 
-    
 Base.metadata.create_all(engine)
