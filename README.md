@@ -14,3 +14,4 @@
 |$repair | Used to repair item's maximum durability.
 |$enhance | Enhancing level of items. (Currently it's not really comfortable to use.)
 |$enhLast | Enhances last chosen item.
+|$naderr | Change the current failstack value with one from your naderr's band.
