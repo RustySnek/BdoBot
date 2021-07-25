@@ -478,9 +478,4 @@ async def on_message(message):
     if message.content.lower() in keywords:
         await keywords[message.content.lower()](message, player)
 
-<<<<<<< HEAD
-=======
-client.run("Your Token")
->>>>>>> f6f85a9187a4bfb8eb6f8672e422866fa2d99e2a
-
 client.run("TOKEN")
